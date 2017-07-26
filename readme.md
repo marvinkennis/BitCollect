@@ -17,6 +17,8 @@ Output is written to CSV files.
 ## News 
 The news scraper collects news articles from CNBC, News.Bitcoin.com, Bloomberg, Wallstreet Journal, Reuters, and Coindesk. You can specify which of these you want to include/exclude in your data collection.  As a general pattern, this scraper first traverses all pages on each site's search results, collects the URLs for the articles, and then collects the actual article data. It collects the actual articles after every search result page, then goes to the next search results page to gather more URLs to visit. 
 
+** Note that the code for this scraper is very heavily commented, which in itself step by step explains how it works in detail **
+
 In general, this scraper is pretty flexible and easy to adapt when a site changes. The code includes two config dictionaries where you can edit the XPaths for the site elements. Editing those breaks nothing else. These dictionaries are found in the scrapeconfig.py file. 
 
 The news scraper uses multiprocessing and creates a separate thread for every source you are scraping. This greatly speeds up the data collection. 
