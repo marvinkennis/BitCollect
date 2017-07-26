@@ -1,6 +1,6 @@
 This repository contains four different scrapers for Bitcoin-related data collection. 
 
-##IRC
+## IRC
 The IRC scraper collects data through the bitcoinstats IRC archive and is the most straightforward scraper included in this repo. The Bitcoin IRC archive contains the #otc and #dev channels. To collect data, specify both the channel and the year from which you want to collect data: 
 ```
 python IRCScraper.py otc 2015 
