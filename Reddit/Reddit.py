@@ -8,6 +8,8 @@ import time
 import praw
 import os
 
+import datetime
+
 #JSON parsing
 import json
 
@@ -28,7 +30,7 @@ def saveSubmission(submission, filename):
     else:
         name = submission.author.name
     csvwriter = csv.writer(open(filename, "a"))
-    csvwriter.writerow([submission.created, submission.permalink,  name, submission.title, submission.selftext, submission.score])
+    csvwriter.writerow([datetime.datetime.fromtimestamp(submission.created).strftime('%c'), submission.permalink,  name, submission.title, submission.selftext, submission.score])
 
 # Downloads all the self posts from given subreddit
 # ts_interval - the interval in seconds for each request cycle

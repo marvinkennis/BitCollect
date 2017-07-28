@@ -53,10 +53,10 @@ which would collect all articles, from all sources, over all years. Output is wr
 In order to use this scraper to collect data from other news websites, you have to define respective XPaths for the relevant elements on the search results and articles page. The required dictionary keys / xpath definitions are explained in the scrapeconfig.py file. Simply copy the a dictionary entry in the pageConfig and resultsConfig dictionaries and fill them out with the correct data. This required you to be somewhat familiar with how xpaths work. 
 
 ## Reddit 
-This reddit scraper works for *any* subreddit. Simply specify the subreddit with the (required) --subreddit argument. NOTE: You will have to use your own Reddit account (username and password) and Reddit API key to use this scraper. 
+This reddit scraper works for *any* subreddit. Simply specify the subreddit with the (required) --subreddit argument. NOTE: You will have to use your own Reddit account (username and password) and Reddit API key to use this scraper. It only collects the parent post text (if available), title, creation date, author, and score, but it really is quite fast. Benchmarked it at around 3K posts/minute. 
 
 ### Create a new Reddit application and configure the settings.py file 
-Once logged into your account, go to https://www.reddit.com/prefs/apps/ and click on 'create a new app'. Fill in the relevant information and make sure you set the application type to 'script application'. The client ID and secret key can then be entered into the config dict in settings.py, along with your Reddit username and password - I suggest just making a new account for this. The Reddit account of which you enter the credentials needs to be the same as the account on which you have created the API credentials. 
+Once logged into your account, go to https://www.reddit.com/prefs/apps/ and click on 'create a new app'. Fill in the relevant information and make sure you set the application type to 'script application'. The client ID and secret key can then be entered into the config dictionary in the settings.py file, along with your Reddit username and password - I suggest just making a new account for this. The Reddit account of which you enter the credentials needs to be the same as the account on which you have created the API/application keys. 
 
 #### (required) Input argument: --subreddit
 URL extension of the subreddit you want to scrape, basically just the part that comes after reddit.com/r/...
