@@ -5,222 +5,191 @@ import sys
 reload(sys)
 sys.setdefaultencoding('utf-8')
 
+
+import multiprocessing
+
 import re
 import os
 import time
+import csv 
+import math
 import logging
+import requests
 from platform import platform
 from lxml import etree
+from lxml import html
 from forumlist import  *
 
-from selenium import webdriver
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+#Parsing CLI arguments
+import argparse
 
+from dateutil.parser import parse as dateParse 
+import datetime
+import time
 
-#Bitcointalk is a mess, impossible to capture with normal requests so resorting to 
-#browser simulation with Selenium + phantomJS; downside: super super slow 
-def getPhantomJS():
+def parsedHTML(urlType, id, pageCounter):
+	#This function handles the web requests and parses the HTML into an lxml tree 
+	#Headers so we don't get 403 forbidden errors 
+    cookies = {
+        'PHPSESSID': '4iv9q9mc262v8j3vtmsrjf86r6',
+    }
 
-    service_args = [
-        '--load-images=false',
-        '--disk-cache=true',
-    ]
+    headers = {
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.8',
+        'Upgrade-Insecure-Requests': '1',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Cache-Control': 'max-age=0',
+        'Connection': 'keep-alive',
+        'If-Modified-Since': 'Thu, 27 Jul 2017 18:15:14 GMT',
+    }
 
-    dcap = dict(DesiredCapabilities.PHANTOMJS)
-    dcap["phantomjs.page.settings.userAgent"] = (
-        "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.71 Safari/537.36"
+    #Merge the topic/board ID and the page counter (40-increments) into a single identifier 
+    pageIdentifier = str(id)+'.'+str(pageCounter)
+    print pageIdentifier
+
+    #To get a post, params include 'topic', and an integer, suffixed with 0 as the page counter
+    params = (
+        (urlType, pageIdentifier),
     )
+    print params
+    
+    #URL for bitcointalk stays the same, just modifying the parameters 
+    url = 'https://bitcointalk.org/index.php'
+    page = requests.get(url, headers=headers, params=params, cookies=cookies)
+    tree = html.fromstring(page.content)
+    return tree
 
-    phantomjs_path = os.path.join(os.getcwd(), 'phantomjs')
-
-    browser = webdriver.PhantomJS(executable_path='./phantomjs',
-        service_args = service_args, desired_capabilities = dcap)
-    return browser
-
-def getMaxPage(sel):
-    pages = sel.xpath('//a[@class="navPages"]/text()')
+def getMaxPage(boardPage):
+    #Go over all the pages with the navPages class, convert to int and pick the highest
+    #Using the 'max' function
+    pages = boardPage.xpath('//a[@class="navPages"]/text()')
     pages = [int(x) for x in pages if x.isdigit()]
     maxPage = max(pages)
     return maxPage
 
-def getTopic(browser, startURL, result):
+#Get topic gets individual topics, after the page has been fetched 
+def getTopic(topicURL):
+    #to get the topic ID we split the url twice
+    topicID = topicURL.split("=")[-1].split(".")[0]
+    print topicID
 
-    logging.debug('ready to scrape topic => %s', result['topicTitle'])
-    logging.debug('topic url => %s', startURL)
+    tree = parsedHTML('topic',topicID, '0')
 
-    startURL += ';all'
-    browser.get(startURL)
-    sel = etree.HTML(browser.page_source)
-    items = sel.xpath('//form[@id="quickModForm"]/table/tbody/tr')
+    #Get the timestamp first, if it's not from a year we want, skip it 
+    timestamp = tree.xpath('//div[@class="smalltext"]')[1].text_content()
 
-    activities = re.findall('Activity: ([0-9]+)', browser.page_source, re.S)
-    if not activities:
-        result['replies'] = []
-        logging.error('failed to scrape replies => %s', result['topicTitle'])
-        logging.error('topic url => %s', startURL)
-        return
+    todayDate = str(time.strftime('%d %B %Y'))
+    timestamp = timestamp.replace('Today', todayDate)
+    timestamp = timestamp.replace(' at',",")
+    timestamp = dateParse(timestamp)
 
-    body = sel.xpath('//*[@id="quickModForm"]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/table/tbody/tr[1]/td[2]/div/text()')
-    authorActivity = activities[0]
-    result['body'] = body
+    postBody = tree.xpath('//div[@class="post"]')[0].text_content()
+    print postBody
+    authorActivity = tree.xpath('//td[@class="poster_info"]/div[@class="smalltext"]')[0].text_content().split('Activity: ')[-1].split('\n')[0]
+    
+    return [postBody, timestamp, authorActivity]
+    
+    #[0].text_content()
+def getBoard(forumName, boardID, scrapeYears):
+    #Get the first forum board page to get maxpages and count loops
+    boardPage = parsedHTML('board', boardID,'0')
+    maxPage = getMaxPage(boardPage)
 
-    topicdate = sel.xpath('//*[@id="quickModForm"]/table[1]/tbody/tr[1]/td/table/tbody/tr/td/table/tbody/tr[1]/td[2]/table/tbody/tr/td[2]/div[2]/text()')
-    print topicdate
-    result['topicdate'] = topicdate
-    result['authorActivity'] = int(authorActivity)
-    topictitle = sel.xpath('//*[@id="bodyarea"]/div[1]/div/b[4]/a/text()')
-    print topictitle
-    authorItem = items[0]
-    timestamp = authorItem.xpath('.//td[@class="td_headerandpost"]//tr/td[2]/div[2]/text()')
-    if not timestamp:
-        timestamp = authorItem.xpath('.//td[@class="td_headerandpost"]//tr/td[2]/div[2]/span/text()')
+    #Set a filename where we collect all the topics that are scraped
+    filename = forumName+'_bitcointalk.csv'
+    #40 posts per page, 
+    loops = int(math.ceil((float(maxPage)/40)))
+    for i in range(2,loops+1):
 
-    timestamp = timestamp[0]
+        #-40 because it starts at .0 on the first page 
+        pageCounter = str(i*40-40)
 
-    #only created in 2015 will be handled
-    if not re.search('(2015)', timestamp):
-        result = {}
-        return
+        #Specify the type of the request, the ID, and the page counter 
+        boardPage = parsedHTML('board', boardID, pageCounter)
+        #Really stupid XPath selector relying on the cellpadding property... 
+        items = boardPage.xpath('//table[@cellpadding="4" and @class="bordercolor"]/tr')
+        #print(etree.tostring(items, pretty_print=True))
+        print len(items)
+        for item in items:
+            #Check when the last reply was, 
+            last_reply = item.xpath('./td[contains(@class, "lastpostcol")]/span')
+            
+            if len(last_reply) < 1:
+                print ' no last reply'
+                continue
+                
+            #Get the last reply time, so we can filter if it is from a year we don't want 
+            last_reply = last_reply[0].text_content()
+            #print(etree.tostring(item, pretty_print=True))
 
-    result['timestamp'] = timestamp
-    result['topictitle']
+            #Creating a regex string from the scrapeyears 
+            #IF the last reply year is below the lowest as defined in scrapeyears, ignore it
+            #Input argument is in strings so have to convert it first 
+            inputYears = [int(sYear) for sYear in scrapeYears]
 
-    items = items[1:]
-    replies = []
+            now = datetime.datetime.now()
+            yearRange = range(min(yearList),int(now.year)+1)
 
-    index = 1
+            reString = '(201['
+            reString += sYear.replace("201","")
+            reString += '])'
+            #If the last reply wasn't in any of the specified years, terminate
+            #Topics are ordered by reply or post date, so can just terminate if it is smaller year 
+    
+            if not re.search(reString, last_reply) \
+                and not re.search('(Today)', last_reply):
+                print 'skipping because of date'
+                continue
 
-    for item in items:
-        author = item.xpath('.//td[@class="poster_info"]/b/a/text()')
-        if not author:continue
-        author = author[0]
+            result = {}
+            topicTitle = item.xpath('td/span[contains(@id, "msg_")]/a')[0].text_content()
+            print topicTitle
+            author = item.xpath('td/a[contains(@title, "View the profile of")]')[0].text_content()
+            print author
+            topicURL = item.xpath('td/span[contains(@id, "msg_")]/a')[0].get('href')
+            print topicURL
+            totalReplies = int(item.xpath('td')[4].text_content().replace(" ", ""))
+            print totalReplies
 
-        timestamp = item.xpath('.//td[@class="td_headerandpost"]//tr/td[2]/div[2]/text()')
-        if not timestamp:continue
-        timestamp = timestamp[0]
+            result['topicTitle'] = topicTitle
+            result['author'] = author
+            result['topicURL'] = topicURL
+            result['totalReplies'] = totalReplies
 
-        if not re.search('([A|P]M)', timestamp):continue
+            print 'getting Topic'
+            topic = getTopic(topicURL)
+            print topic[1]
+            print topic[1]
+   
+            scrapeYear = '2016'
+            if str(topic[1].year) != scrapeYear:
+                continue
+            
+            authorActivity = topic[2]
+            timestamp = topic[1]
+            topicBody = topic[0]
 
-        #only posted in 2015 will be handled
-        if not re.search('(2015)', timestamp):continue
-
-        text = item.xpath('.//td[@class="td_headerandpost"]//div[@class="post"]/text()')
-        if text:
-            text = text[0]
-
-        reply = {}
-        reply['author'] = author
-        reply['timestamp'] = timestamp
-        reply['authorActivity'] = int(activities[index])
-        reply['text'] = text
-        replies.append(reply)
-
-    result['replies'] = replies
-
-def getPage(browser, sel):
-    if sel.xpath('//td[text()="Child Boards"]'):
-        items = sel.xpath('//div[@id="bodyarea"]/div[3]/table/tbody/tr')
-    else:
-        items = sel.xpath('//div[@id="bodyarea"]/div[2]/table/tbody/tr')
-
-    pageResult = []
-    for item in items:
-
-        last_reply = item.xpath('td[7]/span/text()')
-        if not last_reply: continue
-
-        last_reply = last_reply[0]
-        if not re.search('(201[5|6|7])', last_reply) \
-            and not re.search('(Today)', last_reply):
-            continue
-
-        result = {}
-        topicTitle = item.xpath('td[3]/span/a/text()')
-        author = item.xpath('td[4]/a/text()')
-        topic_url = item.xpath('td[3]/span/a/@href')
-        TotalReplies = item.xpath('td[5]/text()')
-
-        if not topicTitle \
-            or not author \
-            or not topic_url \
-            or not TotalReplies:
-            continue
-
-        topic_url = topic_url[0]
-        topicTitle = topicTitle[0]
-        author = author[0]
-        TotalReplies = TotalReplies[0]
-
-        result['topicTitle'] = topicTitle
-        print topicTitle
-        result['author'] = author
-        result['topic_url'] = topic_url
-        result['TotalReplies'] = int(TotalReplies)
-
-        getTopic(browser, topic_url, result)
-        time.sleep(1)
-
-        #now only scrape 2015
-        if result:
-            pageResult.append(result)
-
-    return pageResult
-
-def getForum(browser, name, startURL):
-
-    logging.info('ready to scrape forum => %s', name)
-    logging.info('forum url => %s', startURL)
-
-    browser.get(startURL)
-    sel = etree.HTML(browser.page_source)
-    maxPage = getMaxPage(sel)
-
-    output = []
-
-    pageURL = startURL
-    fileName = name.replace(' ', '_')
-    fileName += '.txt'
-    for i in range(2, maxPage + 1):
-        pageResult = getPage(browser, sel)
-        if pageResult:
-            output.extend(pageResult)
-
-        with open(fileName, 'wb') as f:
-            f.write(str(output))
-            f.close()
-
-        pageURL = sel.xpath('//td[@id="toppages"]/a[text()=%d]/@href' % i)
-        if not pageURL:
-            logging.error('failed to get page => %d', i)
-            break
-        pageURL = pageURL[0]
-        browser.get(pageURL)
-        sel = etree.HTML(browser.page_source)
-
-    with open(fileName, 'wb') as f:
-        f.write(str(output))
-        f.close()
-
-    logging.info('successfully scrape forum =>%s', name)
-
-def getConfig():
-    logging.basicConfig(level=logging.INFO,
-        format='%(asctime)s [line:%(lineno)d] %(message)s',
-        datefmt='%a, %d %b %Y %H:%M:%S')
-
-def run():
-
-    getConfig()
-    browser = getPhantomJS()
-
-    for forumName, forumUrl in forums.items():
-        start = time.clock()
-        getForum(browser, forumName, forumUrl)
-        stop = time.clock()
-        logging.info('scrape forum => %s cost %f sec', forumName, stop - start)
-
-    browser.quit()
+            csvwriter = csv.writer(open(filename, "a"))
+            csvwriter.writerow([timestamp, author, authorActivity, topicTitle, totalReplies, topicURL, topicBody])
 
 if __name__ == '__main__':
-    run()
+    parser = argparse.ArgumentParser(description='Scrape news articles')
+    parser.add_argument('--years', nargs='+', dest="scrapeYears", help='Specify the years you want to collect from', required=False)
+    parser.add_argument('--boards', nargs='+', dest="sources", help='Set the forum boards you want to collect from', required=True)
+    args = parser.parse_args()
 
+    print args.scrapeYears
+    print args.sources
+    scrapeYears = args.scrapeYears
+    scrapeBoards = args.sources
+
+
+    for board in scrapeBoards:
+        #Using multiprocessing to speed things up a little. Creates new process thread for every source channel/forum board
+        #For that reason, maybe not scrape too many discussion boards at once
+		#Calling getBoards also calls its child function that collects topics 
+		p = multiprocessing.Process(target=getBoard, args=(board, forumIDs[board], scrapeYears))
+		p.start()
+		print 'started thread'

@@ -27,7 +27,7 @@ The news scraper uses multiprocessing and creates a separate thread for every so
 ### Execution
 This scraper has two (optional) input arguments when you run it from the command line: 
 --year (will then only collect data from this year)
---sources (allows you to en)
+--sources (allows you to limit data collection to specific news channels)
 
 You can input anything reasonable in year, but sources is currently limited to the following: 
 - wsj (WallStreet Journal)
@@ -59,3 +59,5 @@ TBA
 This scraper collects data from the Bitcointalk.org forum. Just note that this one is incredibly slow. Bitcointalk has no nice search or filter function, so we have to visit all posts on the selected boards, check their dates, and go from there. Furthermore, Bitcointalk doesn't work well with Python requests, so this scraper resorts to selenium + ghostdriver. The binary for phantomJS is included.
 
 Just like with the news scraper, a separate 'config' file is included that tells the scraper which forum boards to collect data from. Edit the dictionary in the *forumlist.py* file with the title and correct board URL. It is currently configured to only collect data from the 'Discussions' board. 
+
+R
