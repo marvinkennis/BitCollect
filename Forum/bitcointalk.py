@@ -78,7 +78,12 @@ def getTopic(topicURL):
     tree = parsedHTML('topic',topicID, '0')
 
     #Get the timestamp first, if it's not from a year we want, skip it 
-    timestamp = tree.xpath('//div[@class="smalltext"]')[1].text_content()
+    try:
+        timestamp = tree.xpath('//div[@class="smalltext"]')[1].text_content()
+    except:
+        print 'NO TIMESTAMP FOUND'
+        print topicURL
+        return False
 
     todayDate = str(time.strftime('%d %B %Y'))
     timestamp = timestamp.replace('Today', todayDate)
@@ -92,17 +97,27 @@ def getTopic(topicURL):
     return [postBody, timestamp, authorActivity]
     
     #[0].text_content()
+def convertStringDate(timestamp):
+    todayDate = str(time.strftime('%d %B %Y'))
+    timestamp = timestamp.replace('Today', todayDate)
+    timestamp = timestamp.replace(' at',",")
+    timestamp = dateParse(timestamp)
+    return timestamp
+
 def getBoard(forumName, boardID, scrapeYears):
+    #Boolean used in setting CSV header rows at the end of this function 
+    first = True 
     #Get the first forum board page to get maxpages and count loops
     boardPage = parsedHTML('board', boardID,'0')
     maxPage = getMaxPage(boardPage)
 
     #Set a filename where we collect all the topics that are scraped
-    filename = forumName+'_bitcointalk.csv'
+    filename = forumName+'_bitcointalk_'+str(int(time.time()))+'.csv'
     #40 posts per page, 
     loops = int(math.ceil((float(maxPage)/40)))
     for i in range(2,loops+1):
 
+        
         #-40 because it starts at .0 on the first page 
         pageCounter = str(i*40-40)
 
@@ -119,7 +134,7 @@ def getBoard(forumName, boardID, scrapeYears):
             if len(last_reply) < 1:
                 print ' no last reply'
                 continue
-                
+
             #Get the last reply time, so we can filter if it is from a year we don't want 
             last_reply = last_reply[0].text_content()
             #print(etree.tostring(item, pretty_print=True))
@@ -127,44 +142,53 @@ def getBoard(forumName, boardID, scrapeYears):
             #Creating a regex string from the scrapeyears 
             #IF the last reply year is below the lowest as defined in scrapeyears, ignore it
             #Input argument is in strings so have to convert it first 
-            inputYears = [int(sYear) for sYear in scrapeYears]
+            if scrapeYears:
+                inputYears = [int(sYear) for sYear in scrapeYears]
 
-            now = datetime.datetime.now()
-            yearRange = range(min(yearList),int(now.year)+1)
+                now = datetime.datetime.now()
 
-            reString = '(201['
-            reString += sYear.replace("201","")
-            reString += '])'
-            #If the last reply wasn't in any of the specified years, terminate
-            #Topics are ordered by reply or post date, so can just terminate if it is smaller year 
-    
-            if not re.search(reString, last_reply) \
-                and not re.search('(Today)', last_reply):
-                print 'skipping because of date'
+                #Creating an 'or' regex to filter last_reply dates 
+                reString = '('+str(now.year)
+                for y in range(min(yearList), int(now.year)+1):
+                    reString += "|"+str(sYear)
+                reString += ')'
+
+                #If the last reply is older than any of the specified years, we can be sure that the next posts will
+                #Also be older (posts are ordered by last reply), and thus we can end the scraping of this board 
+                if min(yearList) < convertStringDate(last_reply).year:
+                    return
+                #If the last reply wasn't in any of the specified years, terminate
+                #Topics are ordered by reply or post date, so can just terminate if it is smaller year 
+        
+                if not re.search(reString, last_reply) \
+                    and not re.search('(Today)', last_reply):
+                    print 'skipping because of date'
+                    continue
+
+            #This try/except is a really ugly solution, but sometimes the request just errors out, or the XPath isnt found
+            #Simply skipping the topic instead of creating overly complex filter functions for these edge cases 
+            try:
+                topicTitle = item.xpath('td/span[contains(@id, "msg_")]/a')[0].text_content()
+                print topicTitle
+                author = item.xpath('td/a[contains(@title, "View the profile of")]')[0].text_content()
+                print author
+                topicURL = item.xpath('td/span[contains(@id, "msg_")]/a')[0].get('href')
+                print topicURL
+                totalReplies = int(item.xpath('td')[4].text_content().replace(" ", ""))
+                print totalReplies
+            except:
                 continue
 
-            result = {}
-            topicTitle = item.xpath('td/span[contains(@id, "msg_")]/a')[0].text_content()
-            print topicTitle
-            author = item.xpath('td/a[contains(@title, "View the profile of")]')[0].text_content()
-            print author
-            topicURL = item.xpath('td/span[contains(@id, "msg_")]/a')[0].get('href')
-            print topicURL
-            totalReplies = int(item.xpath('td')[4].text_content().replace(" ", ""))
-            print totalReplies
 
-            result['topicTitle'] = topicTitle
-            result['author'] = author
-            result['topicURL'] = topicURL
-            result['totalReplies'] = totalReplies
-
-            print 'getting Topic'
+            #Collect the topic post text and author activity, as well as the topic start date 
             topic = getTopic(topicURL)
-            print topic[1]
-            print topic[1]
-   
-            scrapeYear = '2016'
-            if str(topic[1].year) != scrapeYear:
+
+            #If any of the above attributes isn't found in the getTopic function, move on 
+            if not topic:
+                continue 
+
+            #We now have the topic start date; if it wasnt started in a specified year, move on 
+            if scrapeYears and str(topic[1].year) not in scrapeYears:
                 continue
             
             authorActivity = topic[2]
@@ -172,12 +196,17 @@ def getBoard(forumName, boardID, scrapeYears):
             topicBody = topic[0]
 
             csvwriter = csv.writer(open(filename, "a"))
+            #If this is the first row we're writing to this CSV, drop in some headers for each column 
+            if first:
+                csvwriter.writerow(['timestamp', 'author', 'authorActivity', 'topicTitle', 'totalReplies', 'topicURL', 'topicBody'])
+                first = False
             csvwriter.writerow([timestamp, author, authorActivity, topicTitle, totalReplies, topicURL, topicBody])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Scrape news articles')
     parser.add_argument('--years', nargs='+', dest="scrapeYears", help='Specify the years you want to collect from', required=False)
     parser.add_argument('--boards', nargs='+', dest="sources", help='Set the forum boards you want to collect from', required=True)
+    parser.add_argument('--boards', nargs='+', dest="sources", help='Set the forum boards you want to collect from', required=False)
     args = parser.parse_args()
 
     print args.scrapeYears
@@ -192,4 +221,4 @@ if __name__ == '__main__':
 		#Calling getBoards also calls its child function that collects topics 
 		p = multiprocessing.Process(target=getBoard, args=(board, forumIDs[board], scrapeYears))
 		p.start()
-		print 'started thread'
+		print 'started thread for %s topics' % board

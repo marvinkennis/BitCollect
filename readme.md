@@ -24,7 +24,7 @@ In general, this scraper is pretty flexible and easy to adapt when a site change
 The news scraper uses multiprocessing and creates a separate thread for every source you are scraping. This greatly speeds up the data collection. 
 
 
-### Execution
+### Usage
 This scraper has two (optional) input arguments when you run it from the command line: 
 --year (will then only collect data from this year)
 --sources (allows you to limit data collection to specific news channels)
@@ -56,8 +56,41 @@ In order to use this scraper to collect data from other news websites, you have 
 TBA
 
 ## Forum 
-This scraper collects data from the Bitcointalk.org forum. Just note that this one is incredibly slow. Bitcointalk has no nice search or filter function, so we have to visit all posts on the selected boards, check their dates, and go from there. Furthermore, Bitcointalk doesn't work well with Python requests, so this scraper resorts to selenium + ghostdriver. The binary for phantomJS is included.
+This scraper collects data from the Bitcointalk.org forum.  Bitcointalk has no nice search or filter function, so we have to visit all posts on the selected boards, check their dates, and go from there. 
 
-Just like with the news scraper, a separate 'config' file is included that tells the scraper which forum boards to collect data from. Edit the dictionary in the *forumlist.py* file with the title and correct board URL. It is currently configured to only collect data from the 'Discussions' board. 
+Just like with the news scraper, a separate 'config' file is included that tells the scraper which forum boards to collect data from, and what the PHPBB ID's for these forums are. Edit the dictionary in the *forumlist.py* file with the title and correct board ID. Board URLS have to following format: https://bitcointalk.org/index.php?board=8.0. You would only specify '8' as the board ID to collect posts from this board
 
-R
+### Usage 
+The forum scraper has two input arguments: 
+#### Input argument: --boards
+This takes either a single forum board or list of boards as input. *You have to make sure you specify the board names in the argument exactly as they are listed in the forumlist.py file* 
+
+The following forum boards are currently included in the file, but other boards can be added by adding a dictionary entry in *forumlist.py*.
+- discussion
+- development_technical
+- mining
+- techsupport
+- projectdevelopment
+- economics
+- marketplace
+- meta
+- politics_society
+- beginners_help
+- offtopic
+- altcoins
+- trading
+
+The below command will collect all topics from all years from the discussion, trading, and economics forum boards. Specifying a forum board is required for the scraper to start.
+```
+python bitcointalk.py --boards discussion trading economics 
+```
+If you specify multiple boards, the program will start a separate thread for each board using multiprocessing. Although it is incredibly fast, I would not recommend starting too many threads simultaneously, as, for reasons unknown to me, it increases the error-rate in collecting the topic attributes. 
+
+#### Input argument: --years 
+Here you can specify a single year, or a list of years. Since the bitcointalk forums are ordered by last reply and the topic start date is not displayed in the results, almost all posts starting from the first results page will have to be visited anyways. So you might as well just collect everything and filter from the resulting CSV files.  
+
+```
+python bitcointalk.py --boards discussion --years 2016 2017  
+```
+
+The above command will collect only topics from the 'Discussions' board that were started in 2016 and 2017. 
