@@ -53,7 +53,26 @@ which would collect all articles, from all sources, over all years. Output is wr
 In order to use this scraper to collect data from other news websites, you have to define respective XPaths for the relevant elements on the search results and articles page. The required dictionary keys / xpath definitions are explained in the scrapeconfig.py file. Simply copy the a dictionary entry in the pageConfig and resultsConfig dictionaries and fill them out with the correct data. This required you to be somewhat familiar with how xpaths work. 
 
 ## Reddit 
-TBA
+This reddit scraper works for *any* subreddit. Simply specify the subreddit with the (required) --subreddit argument. NOTE: You will have to use your own Reddit account (username and password) and Reddit API key to use this scraper. 
+
+### Create a new Reddit application and configure the settings.py file 
+Once logged into your account, go to https://www.reddit.com/prefs/apps/ and click on 'create a new app'. Fill in the relevant information and make sure you set the application type to 'script application'. The client ID and secret key can then be entered into the config dict in settings.py, along with your Reddit username and password - I suggest just making a new account for this. The Reddit account of which you enter the credentials needs to be the same as the account on which you have created the API credentials. 
+
+#### (required) Input argument: --subreddit
+URL extension of the subreddit you want to scrape, basically just the part that comes after reddit.com/r/...
+
+#### (required) Input argument: --year
+You have to specify a specific year to collect posts from. This scraper uses the CloudSearch reddit search endpoint to search between a window of two time intervals.
+
+#### (required) Input argument: --timestamp_interval 
+This is the size of the sliding window that is used to fetch Reddit search results, specified in epochs. Selecting the right interval for your subreddit depends on the amount of posts in the subreddit. The API returns at most 100 posts per query. So for larger subreddits with a higher post frequency, you should select a smaller interval. If you don't, the API might not return all posts made in that interval, since it only returns 100 results. Only downside to a smaller interval. I typically set it to 20000. 
+
+### Usage 
+Example launch command: 
+```
+python Reddit.py --subreddit btc --year 2015 --timestamp_interval 20000 
+```
+The above command will collect Reddit posts from the /r/btc subreddit over 2015, using a 20000 epoch timestamp interval sliding window when fetching results. 
 
 ## Forum 
 This scraper collects data from the Bitcointalk.org forum.  Bitcointalk has no nice search or filter function, so we have to visit all posts on the selected boards, check their dates, and go from there. 

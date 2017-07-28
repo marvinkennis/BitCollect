@@ -206,7 +206,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Scrape news articles')
     parser.add_argument('--years', nargs='+', dest="scrapeYears", help='Specify the years you want to collect from', required=False)
     parser.add_argument('--boards', nargs='+', dest="sources", help='Set the forum boards you want to collect from', required=True)
-    parser.add_argument('--boards', nargs='+', dest="sources", help='Set the forum boards you want to collect from', required=False)
     args = parser.parse_args()
 
     print args.scrapeYears

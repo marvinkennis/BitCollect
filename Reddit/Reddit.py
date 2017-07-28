@@ -1,5 +1,5 @@
 import logging
-
+import settings
 #CLI input
 import argparse
 import time
@@ -11,6 +11,7 @@ import os
 #JSON parsing
 import json
 
+import time
 #Multithreading and CSV processing 
 from multiprocessing import Process
 import csv
@@ -32,9 +33,9 @@ def saveSubmission(submission, filename):
 # Downloads all the self posts from given subreddit
 # ts_interval - the interval in seconds for each request cycle
 # largest_timestamp - if not set, is set to 12 hours from now.
-def getThreads(subredditName, ts_interval, ep1, ep2, user_ag, userAccount):
-    filename = subredditName+'.csv'
-    reddit = praw.Reddit(client_id='#$#$#$#',client_secret='#$#$#$#',user_agent=user_ag,password='#$#$#$#',username=userAccount)
+def getThreads(subredditName, ts_interval, ep1, ep2, user_ag, user):
+    filename = 'Reddit_'+subredditName+'_'+str(int(time.time()))+'.csv'
+    reddit = praw.Reddit(client_id=user['clientID'],client_secret=user['secretKey'],user_agent=user_ag,password=user['password'],username=user['username'])
     print(reddit.user.me())
     #If no time epoch is specified, 
     if ep2 is None:
@@ -81,8 +82,7 @@ def main():
     parser.add_argument("--year", dest="collect_year", type=int, required=True)
     argsx = parser.parse_args()
     collect_year = str(argsx.collect_year)
-    #List of accounts, these all have the same password as defined in common_pass
-    loa = ['btcdataset']
+
 
     #Timeframe between which to scrape
     tst1 = '01.01.'+collect_year+' 00:00:00'
@@ -91,13 +91,12 @@ def main():
 
     #Timezone definition, OS based
     os.environ['TZ'] = 'UTC'
-    common_pass='#$#$#$#'
 
     #Convert time string to epoch 
     epoch1 = int(time.mktime(time.strptime(tst1, pattern)))
     epoch2 = int(time.mktime(time.strptime(tst2, pattern)))
 
-    #Increment
+    #Split the increments over 8 different multithreading processes for increased speed 
     inc = (epoch2 - epoch1 + 1)/8
     ep1 = [0]*8
     ep2 = [0]*8
@@ -105,8 +104,8 @@ def main():
     for i in range(0, 8):
         ep1[i] = epoch1 + i*inc
         ep2[i] = epoch1 + (i + 1)*inc - 1
-        user_agx = 'mavvrr' + str(i)
-        user = loa[0]
+        user_agx = 'Collection' + str(i)
+        user = settings.config
         p = Process(target=getThreads, args=(argsx.subreddit, argsx.timestamp_interval, ep1[i], ep2[i], user_agx, user))
         p.start()
         processes.append(p)
