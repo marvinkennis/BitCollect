@@ -28,8 +28,8 @@ import csv
 import time 
 
 #Setting default to UTF8 to deal with pesky ascii errors in python 2.x
-import sys;
-reload(sys);
+import sys
+reload(sys)
 sys.setdefaultencoding("utf8")
 
 def parsedHTML(url):
